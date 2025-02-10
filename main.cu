@@ -6,7 +6,7 @@
 #include <string>
 
 // PMPP Edition 4, page 60
-// TODO: Gaussian filter convolution
+// TODO: Time and optimize for warps
 __global__ void BlurKernel(uchar* in, uchar* out, int width, int height)
 {
     constexpr int BLUR_SIZE = 5;
