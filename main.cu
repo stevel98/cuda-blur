@@ -5,23 +5,24 @@
 
 #include <string>
 
-// Something is very wrong
+// PMPP Edition 4, page 60
+// TODO: Gaussian filter convolution
 __global__ void BlurKernel(uchar* in, uchar* out, int width, int height)
 {
-    constexpr int BLUR_SIZE = 1;
+    constexpr int BLUR_SIZE = 5;
 
     const int col = blockIdx.x * blockDim.x + threadIdx.x;
     const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
-    const auto in_bounds = [&] (int col, int row) {
+    const auto in_bounds = [&] (int row, int col) {
         return col >= 0 && row >= 0 && col < width && row < height;
     };
 
-    if (in_bounds(row, height)) {
+    if (in_bounds(row, col)) {
         int pixel = 0;
         int num_pixels = 0;
         for (int col_idx = col - BLUR_SIZE; col_idx <= col + BLUR_SIZE; ++col_idx) {
-            for (int row_idx = row - BLUR_SIZE; row_idx <= row_idx + BLUR_SIZE; ++row_idx) {
+            for (int row_idx = row - BLUR_SIZE; row_idx <= row + BLUR_SIZE; ++row_idx) {
                 if (in_bounds(row_idx, col_idx)) {
                     pixel += in[row_idx * width + col_idx];
                     ++num_pixels;
@@ -61,7 +62,7 @@ int main() {
     uchar* h_output = (uchar*) malloc(array_size);
     cudaMemcpy(h_output, d_output, array_size, cudaMemcpyDeviceToHost);
     cv::Mat output_mat_to_write(input_mat.size(), input_mat.type(), (void*) h_output);
-    const std::string absolute_path_to_write = "/home/coder/volume/blur/Output2.jpg";
+    const std::string absolute_path_to_write = "/home/coder/volume/blur/Output.jpg";
     if (!cv::imwrite(absolute_path_to_write, output_mat_to_write)) {
         std::cout << "failed to write image\n";
     }
