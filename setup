@@ -1,3 +1,4 @@
-apt-install libopencv-dev
+apt update
+apt install libopencv-dev
 
-nvcc main.cu -I/usr/local/cuda/bin/../targets/x86_64-linux/include -I/usr/include/opencv4 -lopencv_core -lopencv_videoio
+nvcc main.cu -I/usr/local/cuda/bin/../targets/x86_64-linux/include -I/usr/include/opencv4 -lopencv_core -lopencv_videoio -lopencv_imgcodecs

@@ -1,42 +1,73 @@
 #include "opencv2/opencv.hpp"
-#include "blur.h"
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
 
 #include <string>
 
-__global__ void blurKernel(uchar3* d_inputMat, uchar* d_kernelMat)
+// Something is very wrong
+__global__ void BlurKernel(uchar* in, uchar* out, int width, int height)
 {
-    return;
+    constexpr int BLUR_SIZE = 1;
+
+    const int col = blockIdx.x * blockDim.x + threadIdx.x;
+    const int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+    const auto in_bounds = [&] (int col, int row) {
+        return col >= 0 && row >= 0 && col < width && row < height;
+    };
+
+    if (in_bounds(row, height)) {
+        int pixel = 0;
+        int num_pixels = 0;
+        for (int col_idx = col - BLUR_SIZE; col_idx <= col + BLUR_SIZE; ++col_idx) {
+            for (int row_idx = row - BLUR_SIZE; row_idx <= row_idx + BLUR_SIZE; ++row_idx) {
+                if (in_bounds(row_idx, col_idx)) {
+                    pixel += in[row_idx * width + col_idx];
+                    ++num_pixels;
+                }
+            }
+        }
+        out[row * width + col] = (pixel / num_pixels);
+    }
 }
 
-void blurCaller(const cv::Mat& inputMat, cv::Mat& kernelMat)
-{
-    // allocate device pointers
-    uchar3 *d_inputMat;
-    uchar  *d_kernelMat;
-    cudaMalloc(&d_inputMat,  inputMat.total() * sizeof(uchar3));
-    cudaMalloc(&d_kernelMat, kernelMat.total() * sizeof(uchar));
+int main() {    
+    const std::string absolute_path = "/home/coder/volume/blur/Halftone_Gaussian_Blur.jpg"; 
+    cv::Mat input_mat = cv::imread(absolute_path, cv::IMREAD_GRAYSCALE);
+    cv::Mat output_mat = cv::Mat(input_mat.size(), input_mat.type());
 
-    // copy from host to device
-    cudaMemcpy(d_inputMat, inputMat.ptr<uchar3>(0), inputMat.total() * sizeof(uchar3), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_kernelMat, kernelMat.ptr<uchar>(0), kernelMat.total() * sizeof(uchar), cudaMemcpyHostToDevice);
+    std::cout << "input_mat.size() " << input_mat.size() << "\n";
+    std::cout << "input_mat.height: " << input_mat.size().height << "\n";
+    std::cout << "input_mat.width: " << input_mat.size().width << "\n";
+    const size_t array_size = input_mat.total() * sizeof(uchar);
 
-    // call CUDA kernel
-    blurKernel <<<1, 1>>> (d_inputMat, d_kernelMat);
+    uchar* d_input;
+    uchar* d_output;
+    cudaMalloc(&d_input, array_size);
+    cudaMalloc(&d_output, array_size);
 
-    // free
-    cudaFree(d_inputMat);
-    cudaFree(d_kernelMat);
-}
+    cudaMemcpy(d_input, input_mat.ptr<uchar>(0), array_size, cudaMemcpyHostToDevice);
+    // Is it necessary to copy the output mat over?
+    cudaMemcpy(d_output, output_mat.ptr<uchar>(0), array_size, cudaMemcpyHostToDevice);
 
-int main() {
-    constexpr std::string_view file = "file.txt";
-    // input data
-    cv::Mat inputMat(cv::Size(128, 128), CV_8UC3, cv::Scalar(100));
-    cv::Mat kernelMat(cv::Size(16, 16), CV_8UC1, cv::Scalar(1));
+    const cv::Size size = input_mat.size();
+    dim3 gridDim(ceil(size.width / 32.0), ceil(size.height / 32.0), 1);
+    dim3 blockDim(32, 32, 1);  
+    std::cout << "gridDim: " << gridDim.x << "," << gridDim.y << "," << gridDim.z << "\n";
+    std::cout << "blockDim: " << blockDim.x << "," << blockDim.y << "," << blockDim.z << "\n";
+    BlurKernel <<<gridDim, blockDim>>> (d_input, d_output, size.width, size.height);
 
-    // call CUDA
-    blurCaller(inputMat, kernelMat);
+    uchar* h_output = (uchar*) malloc(array_size);
+    cudaMemcpy(h_output, d_output, array_size, cudaMemcpyDeviceToHost);
+    cv::Mat output_mat_to_write(input_mat.size(), input_mat.type(), (void*) h_output);
+    const std::string absolute_path_to_write = "/home/coder/volume/blur/Output2.jpg";
+    if (!cv::imwrite(absolute_path_to_write, output_mat_to_write)) {
+        std::cout << "failed to write image\n";
+    }
 
-    std::cout << "done\n";
+    cudaFree(d_input);
+    cudaFree(d_output);
+
     return 0;
 }
