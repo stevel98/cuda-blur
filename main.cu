@@ -5,12 +5,12 @@
 
 #include <string>
 
+constexpr int BLUR_SIZE = 8;
+
 // PMPP Edition 4, page 60
 // TODO: Time and optimize for warps
 __global__ void BlurKernel(uchar* in, uchar* out, int width, int height)
-{
-    constexpr int BLUR_SIZE = 5;
-
+{   
     const int col = blockIdx.x * blockDim.x + threadIdx.x;
     const int row = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -33,16 +33,48 @@ __global__ void BlurKernel(uchar* in, uchar* out, int width, int height)
     }
 }
 
+std::string OutputFile(const std::string& s) {
+    int idx = s.find(".");
+    std::string prefix = s.substr(0, idx);
+    std::string postfix = s.substr(idx, s.length());
+    return prefix + "_Blurred" + postfix;
+}
+
+class ScopedTimer {
+ public:
+  ScopedTimer() {
+    cudaEventCreate(&begin_);
+    cudaEventCreate(&end_);
+    cudaEventRecord(begin_);
+  }
+
+  ~ScopedTimer() {
+    cudaEventRecord(end_);
+    cudaEventSynchronize(begin_);
+    cudaEventSynchronize(end_);
+
+    float elapsed_time_ms;
+    cudaEventElapsedTime(&elapsed_time_ms, begin_, end_);
+    printf("Elapsed time: (%7.6f) s\n", elapsed_time_ms / 1000);
+    // TODO: Calculate flops
+  }
+
+  cudaEvent_t begin_;
+  cudaEvent_t end_;
+};
+
 int main() {    
-    const std::string absolute_path = "/home/coder/volume/blur/Halftone_Gaussian_Blur.jpg"; 
+    const std::string absolute_path = "/home/coder/volume/blur/Mona_Lisa.jpg"; 
+    std::cout << "Path: " << absolute_path << "\n";
+    std::cout << "BLUR_SIZE: " << BLUR_SIZE << "\n";
+
     cv::Mat input_mat = cv::imread(absolute_path, cv::IMREAD_GRAYSCALE);
     cv::Mat output_mat = cv::Mat(input_mat.size(), input_mat.type());
-
     std::cout << "input_mat.size() " << input_mat.size() << "\n";
     std::cout << "input_mat.height: " << input_mat.size().height << "\n";
     std::cout << "input_mat.width: " << input_mat.size().width << "\n";
-    const size_t array_size = input_mat.total() * sizeof(uchar);
 
+    const size_t array_size = input_mat.total() * sizeof(uchar);
     uchar* d_input;
     uchar* d_output;
     cudaMalloc(&d_input, array_size);
@@ -57,13 +89,19 @@ int main() {
     dim3 blockDim(32, 32, 1);  
     std::cout << "gridDim: " << gridDim.x << "," << gridDim.y << "," << gridDim.z << "\n";
     std::cout << "blockDim: " << blockDim.x << "," << blockDim.y << "," << blockDim.z << "\n";
-    BlurKernel <<<gridDim, blockDim>>> (d_input, d_output, size.width, size.height);
+
+    {
+        ScopedTimer timer;
+        BlurKernel <<<gridDim, blockDim>>> (d_input, d_output, size.width, size.height);
+    }
 
     uchar* h_output = (uchar*) malloc(array_size);
     cudaMemcpy(h_output, d_output, array_size, cudaMemcpyDeviceToHost);
     cv::Mat output_mat_to_write(input_mat.size(), input_mat.type(), (void*) h_output);
-    const std::string absolute_path_to_write = "/home/coder/volume/blur/Output.jpg";
-    if (!cv::imwrite(absolute_path_to_write, output_mat_to_write)) {
+    
+    std::string output_file = OutputFile(absolute_path);
+    std::cout << "Output file: " << output_file << "\n";
+    if (!cv::imwrite(output_file, output_mat_to_write)) {
         std::cout << "failed to write image\n";
     }
 

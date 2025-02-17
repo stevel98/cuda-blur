@@ -1,4 +1,9 @@
+# Modal command: modal launch vscode --gpu t4 --volume=learn-cuda --image=nvidia/cuda:12.4.0-devel-ubuntu22.04
+
 apt update
 apt install libopencv-dev
 
 nvcc main.cu -I/usr/local/cuda/bin/../targets/x86_64-linux/include -I/usr/include/opencv4 -lopencv_core -lopencv_videoio -lopencv_imgcodecs
+
+git config --global user.email "lizhuxin27@gmail.com"
+git config --global user.name "Steve Li"
