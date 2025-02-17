@@ -59,6 +59,7 @@ class ScopedTimer {
     // TODO: Calculate flops
   }
 
+ private:
   cudaEvent_t begin_;
   cudaEvent_t end_;
 };
